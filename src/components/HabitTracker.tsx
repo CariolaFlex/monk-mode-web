@@ -1,36 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { format, differenceInDays, addDays } from "date-fns";
+import { HabitState, Habit, Challenge } from "@/types";
 
-// Habit state types
-// 0: Gray (none)
-// 1: Green (🌟 Logro Alto)
-// 2: Purple (🔄 Logro Medio)
-// 3: Red (⚠️ Logro Bajo)
-
-type HabitState = 0 | 1 | 2 | 3;
-
-interface Habit {
-  id: string;
-  name: string;
-  type: "obligatorio" | "opcional";
+interface HabitTrackerProps {
+  challenge: Challenge;
+  onChangeHabitName: (habitId: string, newName: string) => void;
+  onToggleState: (habitId: string, dayIndex: number) => void;
 }
-
-// 32 days as per Excel template
-const DAYS = Array.from({ length: 32 }, (_, i) => i + 1);
-
-const INITIAL_HABITS: Habit[] = [
-  ...Array.from({ length: 12 }, (_, i) => ({
-    id: `ob-${i + 1}`,
-    name: `Obligatorio ${i + 1}`,
-    type: "obligatorio" as const,
-  })),
-  ...Array.from({ length: 8 }, (_, i) => ({
-    id: `op-${i + 1}`,
-    name: `Opcional ${i + 1}`,
-    type: "opcional" as const,
-  })),
-];
 
 // Color mapping based on state
 const STATE_COLORS = {
@@ -40,59 +18,18 @@ const STATE_COLORS = {
   3: "bg-rose-500 hover:bg-rose-400 border-rose-600 shadow-[0_0_10px_rgba(244,63,94,0.5)]", // Red
 };
 
-export default function HabitTracker() {
-  // Application State
-  const [trackerState, setTrackerState] = useState<Record<string, HabitState>>({});
-  const [habits, setHabits] = useState<Habit[]>(INITIAL_HABITS);
-
-  // UI State
+export default function HabitTracker({ challenge, onChangeHabitName, onToggleState }: HabitTrackerProps) {
+  // UI State for editing
   const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load from localStorage on mount (client-side only)
-  useEffect(() => {
-    try {
-      const savedTracker = localStorage.getItem("monkMode_trackerState");
-      const savedHabits = localStorage.getItem("monkMode_habits");
+  // Calculate dynamic days based on start and end dates
+  const startDate = new Date(challenge.startDate);
+  const endDate = new Date(challenge.endDate);
 
-      if (savedTracker) {
-        setTrackerState(JSON.parse(savedTracker));
-      }
-      if (savedHabits) {
-        // Ensure that loaded habits maintain the correct structural count
-        // For robustness, we will trust the saved state if it exists.
-        setHabits(JSON.parse(savedHabits));
-      }
-    } catch (e) {
-      console.error("Failed to load from localStorage", e);
-    } finally {
-      setIsLoaded(true); // Prevents hydration mismatch by delaying render until loaded
-    }
-  }, []);
-
-  // Save to localStorage whenever state changes
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem("monkMode_trackerState", JSON.stringify(trackerState));
-    }
-  }, [trackerState, isLoaded]);
-
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem("monkMode_habits", JSON.stringify(habits));
-    }
-  }, [habits, isLoaded]);
-
-  // Actions
-  const toggleState = (habitId: string, day: number) => {
-    const key = `${habitId}-${day}`;
-    setTrackerState((prev) => {
-      const currentState = prev[key] || 0;
-      const nextState = ((currentState + 1) % 4) as HabitState;
-      return { ...prev, [key]: nextState };
-    });
-  };
+  // Ensure at least 1 day difference
+  const totalDays = Math.max(1, differenceInDays(endDate, startDate) + 1);
+  const DAYS = Array.from({ length: totalDays }, (_, i) => i + 1);
 
   const startEditing = (habitId: string, currentName: string) => {
     setEditingHabitId(habitId);
@@ -101,9 +38,7 @@ export default function HabitTracker() {
 
   const saveEdit = (habitId: string) => {
     if (editValue.trim() !== "") {
-      setHabits((prev) =>
-        prev.map((h) => (h.id === habitId ? { ...h, name: editValue.trim() } : h))
-      );
+      onChangeHabitName(habitId, editValue.trim());
     }
     setEditingHabitId(null);
   };
@@ -116,17 +51,18 @@ export default function HabitTracker() {
     }
   };
 
-  // Prevent hydration mismatch: don't render until localStorage is read
-  if (!isLoaded) {
-    return (
-      <div className="w-full flex items-center justify-center p-12 text-neutral-500">
-        Cargando Monk Mode...
-      </div>
-    );
-  }
-
   return (
-    <div className="w-full max-w-[95vw] mx-auto p-6 bg-neutral-950 rounded-2xl border border-neutral-800 shadow-2xl overflow-hidden flex flex-col items-center">
+    <div className="w-full mx-auto p-6 bg-neutral-950 rounded-2xl border border-neutral-800 shadow-2xl overflow-hidden flex flex-col items-center">
+      <div className="w-full flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-xl font-bold text-neutral-100">{challenge.name}</h2>
+          <p className="text-sm text-neutral-400">{challenge.description}</p>
+        </div>
+        <div className="text-right text-sm text-neutral-500 font-mono">
+          {format(startDate, "MMM d, yyyy")} — {format(endDate, "MMM d, yyyy")}
+        </div>
+      </div>
+
       <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
         <div className="inline-block min-w-max">
           <table className="w-full border-collapse">
@@ -138,14 +74,19 @@ export default function HabitTracker() {
                     Let's fcking Go!
                   </div>
                 </th>
-                {DAYS.map((day) => (
-                  <th
-                    key={day}
-                    className="p-3 text-center border-b border-neutral-800 font-medium text-neutral-400 min-w-[48px]"
-                  >
-                    {day}
-                  </th>
-                ))}
+                {DAYS.map((day) => {
+                  const currentDate = addDays(startDate, day - 1);
+                  return (
+                    <th
+                      key={day}
+                      className="p-3 text-center border-b border-neutral-800 font-medium text-neutral-400 min-w-[48px]"
+                      title={format(currentDate, "MMM d, yyyy")}
+                    >
+                      <div className="text-xs text-neutral-500 mb-1">{format(currentDate, "EE")}</div>
+                      <div>{day}</div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -158,7 +99,7 @@ export default function HabitTracker() {
                   Obligatorios
                 </td>
               </tr>
-              {habits
+              {challenge.habits
                 .filter((h) => h.type === "obligatorio")
                 .map((habit, idx) => (
                   <tr
@@ -207,14 +148,14 @@ export default function HabitTracker() {
                     </td>
                     {DAYS.map((day) => {
                       const key = `${habit.id}-${day}`;
-                      const state = trackerState[key] || 0;
+                      const state = challenge.trackerState[key] || 0;
                       return (
                         <td
                           key={day}
                           className="p-1.5 border-b border-neutral-800/50"
                         >
                           <button
-                            onClick={() => toggleState(habit.id, day)}
+                            onClick={() => onToggleState(habit.id, day)}
                             className={`w-full aspect-square rounded-md border transition-all duration-200 ease-in-out ${STATE_COLORS[state]}`}
                             aria-label={`Mark day ${day} for ${habit.name}`}
                           />
@@ -233,7 +174,7 @@ export default function HabitTracker() {
                   Opcionales
                 </td>
               </tr>
-              {habits
+              {challenge.habits
                 .filter((h) => h.type === "opcional")
                 .map((habit, idx) => (
                   <tr
@@ -282,14 +223,14 @@ export default function HabitTracker() {
                     </td>
                     {DAYS.map((day) => {
                       const key = `${habit.id}-${day}`;
-                      const state = trackerState[key] || 0;
+                      const state = challenge.trackerState[key] || 0;
                       return (
                         <td
                           key={day}
                           className="p-1.5 border-b border-neutral-800/50"
                         >
                           <button
-                            onClick={() => toggleState(habit.id, day)}
+                            onClick={() => onToggleState(habit.id, day)}
                             className={`w-full aspect-square rounded-md border transition-all duration-200 ease-in-out ${STATE_COLORS[state]}`}
                             aria-label={`Mark day ${day} for ${habit.name}`}
                           />
@@ -303,7 +244,7 @@ export default function HabitTracker() {
         </div>
       </div>
 
-      <div className="mt-8 flex flex-wrap gap-6 text-sm text-neutral-400 bg-neutral-900/50 p-4 rounded-xl border border-neutral-800/50">
+      <div className="mt-8 flex justify-center w-full flex-wrap gap-6 text-sm text-neutral-400 bg-neutral-900/50 p-4 rounded-xl border border-neutral-800/50">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded-sm bg-emerald-500 border border-emerald-600 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
           <span>Verde (Logro Alto) 🌟</span>
