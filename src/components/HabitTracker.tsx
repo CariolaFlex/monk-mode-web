@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // Habit state types
 // 0: Gray (none)
@@ -41,9 +41,50 @@ const STATE_COLORS = {
 };
 
 export default function HabitTracker() {
-  // Map of "habitId-day" -> state
+  // Application State
   const [trackerState, setTrackerState] = useState<Record<string, HabitState>>({});
+  const [habits, setHabits] = useState<Habit[]>(INITIAL_HABITS);
 
+  // UI State
+  const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Load from localStorage on mount (client-side only)
+  useEffect(() => {
+    try {
+      const savedTracker = localStorage.getItem("monkMode_trackerState");
+      const savedHabits = localStorage.getItem("monkMode_habits");
+
+      if (savedTracker) {
+        setTrackerState(JSON.parse(savedTracker));
+      }
+      if (savedHabits) {
+        // Ensure that loaded habits maintain the correct structural count
+        // For robustness, we will trust the saved state if it exists.
+        setHabits(JSON.parse(savedHabits));
+      }
+    } catch (e) {
+      console.error("Failed to load from localStorage", e);
+    } finally {
+      setIsLoaded(true); // Prevents hydration mismatch by delaying render until loaded
+    }
+  }, []);
+
+  // Save to localStorage whenever state changes
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem("monkMode_trackerState", JSON.stringify(trackerState));
+    }
+  }, [trackerState, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem("monkMode_habits", JSON.stringify(habits));
+    }
+  }, [habits, isLoaded]);
+
+  // Actions
   const toggleState = (habitId: string, day: number) => {
     const key = `${habitId}-${day}`;
     setTrackerState((prev) => {
@@ -53,6 +94,37 @@ export default function HabitTracker() {
     });
   };
 
+  const startEditing = (habitId: string, currentName: string) => {
+    setEditingHabitId(habitId);
+    setEditValue(currentName);
+  };
+
+  const saveEdit = (habitId: string) => {
+    if (editValue.trim() !== "") {
+      setHabits((prev) =>
+        prev.map((h) => (h.id === habitId ? { ...h, name: editValue.trim() } : h))
+      );
+    }
+    setEditingHabitId(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, habitId: string) => {
+    if (e.key === "Enter") {
+      saveEdit(habitId);
+    } else if (e.key === "Escape") {
+      setEditingHabitId(null);
+    }
+  };
+
+  // Prevent hydration mismatch: don't render until localStorage is read
+  if (!isLoaded) {
+    return (
+      <div className="w-full flex items-center justify-center p-12 text-neutral-500">
+        Cargando Monk Mode...
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-[95vw] mx-auto p-6 bg-neutral-950 rounded-2xl border border-neutral-800 shadow-2xl overflow-hidden flex flex-col items-center">
       <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
@@ -60,7 +132,7 @@ export default function HabitTracker() {
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 bg-neutral-950 p-4 text-left border-b border-r border-neutral-800 font-semibold text-neutral-300 min-w-[200px]">
+                <th className="sticky left-0 z-10 bg-neutral-950 p-4 text-left border-b border-r border-neutral-800 font-semibold text-neutral-300 min-w-[250px]">
                   M O N K M O D E
                   <div className="text-xs font-normal text-neutral-500 mt-1">
                     Let's fcking Go!
@@ -86,15 +158,52 @@ export default function HabitTracker() {
                   Obligatorios
                 </td>
               </tr>
-              {INITIAL_HABITS.filter((h) => h.type === "obligatorio").map(
-                (habit, idx) => (
+              {habits
+                .filter((h) => h.type === "obligatorio")
+                .map((habit, idx) => (
                   <tr
                     key={habit.id}
                     className="group hover:bg-neutral-900/30 transition-colors"
                   >
                     <td className="sticky left-0 z-10 bg-neutral-950 group-hover:bg-neutral-900 p-3 text-sm text-neutral-300 border-b border-r border-neutral-800 transition-colors">
-                      <span className="text-neutral-500 mr-3">{idx + 1}.</span>
-                      {habit.name}
+                      <div className="flex items-center">
+                        <span className="text-neutral-500 mr-3 shrink-0">
+                          {idx + 1}.
+                        </span>
+                        {editingHabitId === habit.id ? (
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={() => saveEdit(habit.id)}
+                            onKeyDown={(e) => handleKeyDown(e, habit.id)}
+                            className="bg-neutral-800 text-neutral-100 px-2 py-1 rounded outline-none border border-neutral-600 focus:border-emerald-500 w-full"
+                          />
+                        ) : (
+                          <div
+                            onClick={() => startEditing(habit.id, habit.name)}
+                            className="group/edit flex items-center justify-between w-full cursor-pointer hover:text-white"
+                            title="Click para editar"
+                          >
+                            <span className="truncate pr-2">{habit.name}</span>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth={1.5}
+                              stroke="currentColor"
+                              className="w-4 h-4 text-neutral-600 opacity-0 group-hover/edit:opacity-100 transition-opacity shrink-0"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125"
+                              />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     {DAYS.map((day) => {
                       const key = `${habit.id}-${day}`;
@@ -113,8 +222,7 @@ export default function HabitTracker() {
                       );
                     })}
                   </tr>
-                )
-              )}
+                ))}
 
               {/* Opcionales */}
               <tr>
@@ -125,15 +233,52 @@ export default function HabitTracker() {
                   Opcionales
                 </td>
               </tr>
-              {INITIAL_HABITS.filter((h) => h.type === "opcional").map(
-                (habit, idx) => (
+              {habits
+                .filter((h) => h.type === "opcional")
+                .map((habit, idx) => (
                   <tr
                     key={habit.id}
                     className="group hover:bg-neutral-900/30 transition-colors"
                   >
                     <td className="sticky left-0 z-10 bg-neutral-950 group-hover:bg-neutral-900 p-3 text-sm text-neutral-300 border-b border-r border-neutral-800 transition-colors">
-                      <span className="text-neutral-500 mr-3">{idx + 1}.</span>
-                      {habit.name}
+                      <div className="flex items-center">
+                        <span className="text-neutral-500 mr-3 shrink-0">
+                          {idx + 1}.
+                        </span>
+                        {editingHabitId === habit.id ? (
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={() => saveEdit(habit.id)}
+                            onKeyDown={(e) => handleKeyDown(e, habit.id)}
+                            className="bg-neutral-800 text-neutral-100 px-2 py-1 rounded outline-none border border-neutral-600 focus:border-emerald-500 w-full"
+                          />
+                        ) : (
+                          <div
+                            onClick={() => startEditing(habit.id, habit.name)}
+                            className="group/edit flex items-center justify-between w-full cursor-pointer hover:text-white"
+                            title="Click para editar"
+                          >
+                            <span className="truncate pr-2">{habit.name}</span>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth={1.5}
+                              stroke="currentColor"
+                              className="w-4 h-4 text-neutral-600 opacity-0 group-hover/edit:opacity-100 transition-opacity shrink-0"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125"
+                              />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     {DAYS.map((day) => {
                       const key = `${habit.id}-${day}`;
@@ -152,8 +297,7 @@ export default function HabitTracker() {
                       );
                     })}
                   </tr>
-                )
-              )}
+                ))}
             </tbody>
           </table>
         </div>
