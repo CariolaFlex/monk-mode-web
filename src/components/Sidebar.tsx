@@ -1,71 +1,72 @@
 "use client";
 
-import { Challenge } from "@/types";
-import { Target, User, Plus, LayoutList } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { LayoutDashboard, Target, LayoutTemplate, Settings, User } from "lucide-react";
 
-interface SidebarProps {
-    challenges: Challenge[];
-    activeChallengeId: string;
-    onSelectChallenge: (id: string) => void;
-    onNewChallenge: () => void;
-}
+export default function Sidebar() {
+    const pathname = usePathname();
 
-export default function Sidebar({
-    challenges,
-    activeChallengeId,
-    onSelectChallenge,
-    onNewChallenge,
-}: SidebarProps) {
+    const navItems = [
+        { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+        { name: "My Trackers", href: "/trackers", icon: Target },
+        { name: "Template Library", href: "/templates", icon: LayoutTemplate },
+        { name: "Settings", href: "/settings", icon: Settings },
+    ];
+
     return (
         <aside className="w-64 bg-neutral-950 border-r border-neutral-800 h-screen flex flex-col flex-shrink-0 sticky top-0 hidden md:flex">
             {/* Profile Section */}
             <div className="p-6 border-b border-neutral-800 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400">
+                <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 overflow-hidden">
+                    {/* Real Avatar would go here */}
                     <User size={24} />
                 </div>
                 <div>
                     <div className="text-sm font-bold text-neutral-100">CariolaFlex</div>
-                    <div className="text-xs text-emerald-500">Monk Mode</div>
+                    <div className="text-xs font-mono text-emerald-500">PRO PLAN</div>
                 </div>
             </div>
 
             {/* Navigation */}
-            <div className="flex-1 overflow-y-auto py-6 px-4 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2 custom-scrollbar">
                 <div className="text-xs font-bold text-neutral-500 mb-4 px-2 uppercase tracking-wider">
-                    Mis Plantillas
+                    Main Menu
                 </div>
 
-                <div className="space-y-1">
-                    {challenges.map((c) => (
-                        <button
-                            key={c.id}
-                            onClick={() => onSelectChallenge(c.id)}
-                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-left transition-colors ${activeChallengeId === c.id
-                                    ? "bg-neutral-800 text-neutral-100"
+                {navItems.map((item) => {
+                    const isActive = pathname === item.href;
+                    const Icon = item.icon;
+
+                    return (
+                        <Link
+                            key={item.name}
+                            href={item.href}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive
+                                    ? "bg-neutral-800 text-neutral-100 shadow-sm"
                                     : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
                                 }`}
                         >
-                            <Target size={16} className={activeChallengeId === c.id ? "text-emerald-500" : ""} />
-                            <span className="truncate">{c.name}</span>
-                        </button>
-                    ))}
-                </div>
-
-                <button
-                    onClick={onNewChallenge}
-                    className="w-full flex items-center gap-3 px-3 py-2 mt-4 rounded-lg text-sm text-left text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200 border border-neutral-800 border-dashed transition-colors"
-                >
-                    <Plus size={16} />
-                    <span>Nuevo Reto</span>
-                </button>
+                            <Icon size={18} className={isActive ? "text-emerald-500" : ""} />
+                            {item.name}
+                        </Link>
+                    );
+                })}
             </div>
 
-            {/* Footer */}
-            <div className="p-4 border-t border-neutral-800">
-                <div className="flex items-center gap-2 text-neutral-500 text-xs px-2">
-                    <LayoutList size={14} />
-                    <span>Plataforma Pro</span>
-                </div>
+            {/* Footer Settings/Logout */}
+            <div className="p-4 border-t border-neutral-800 space-y-2">
+                <Link
+                    href="/login"
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-neutral-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                    Log Out
+                </Link>
             </div>
         </aside>
     );
