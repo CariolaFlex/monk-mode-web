@@ -31,14 +31,6 @@ export default function LandingPage() {
                         Comenzar Ahora
                         <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                     </Link>
-                    <a
-                        href="https://github.com/CariolaFlex/monk-mode-web"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-8 py-4 rounded-full bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-300 font-bold transition-all"
-                    >
-                        Ver Repositorio
-                    </a>
                 </div>
             </main>
 
