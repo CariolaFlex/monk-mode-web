@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import HabitTracker from "@/components/HabitTracker";
 import NewChallengeModal from "@/components/NewChallengeModal";
 import { Challenge, INITIAL_HABITS, HabitState } from "@/types";
+import { useAuth } from "@/context/AuthContext";
+import { getUserChallenges, saveChallenge } from "@/lib/db";
 
 // Helper to generate a default challenge if none exists
 const createDefaultChallenge = (): Challenge => {
@@ -11,9 +13,9 @@ const createDefaultChallenge = (): Challenge => {
   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
 
   return {
-    id: "default-1",
+    id: `chal-${Date.now()}`,
     name: "Monk Mode Base",
-    description: "Plantilla inicial",
+    description: "Mi primer desafío sincronizado en la nube.",
     startDate: now.toISOString().split("T")[0],
     endDate: nextMonth.toISOString().split("T")[0],
     habits: INITIAL_HABITS,
@@ -22,111 +24,138 @@ const createDefaultChallenge = (): Challenge => {
 };
 
 export default function TrackersPage() {
+  const { user } = useAuth();
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [activeChallengeId, setActiveChallengeId] = useState<string>("");
 
   // UI States
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Load from localStorage on map
+  // Load from Firestore
   useEffect(() => {
-    try {
-      const savedStr = localStorage.getItem("monkMode_challenges");
-      const savedActive = localStorage.getItem("monkMode_activeId");
+    let isMounted = true;
 
-      let loadedChallenges = [];
-      if (savedStr) {
-        loadedChallenges = JSON.parse(savedStr);
+    const loadData = async () => {
+      if (!user) return;
+
+      try {
+        const loadedChallenges = await getUserChallenges(user.uid);
+
+        if (!isMounted) return;
+
+        if (loadedChallenges.length === 0) {
+          // If completely new user, generate one and save it directly
+          const defaultChall = createDefaultChallenge();
+          await saveChallenge(user.uid, defaultChall);
+
+          setChallenges([defaultChall]);
+          setActiveChallengeId(defaultChall.id);
+        } else {
+          setChallenges(loadedChallenges);
+          setActiveChallengeId(loadedChallenges[0].id);
+        }
+      } catch (error) {
+        console.error("Failed to load generic challenges from Firestore", error);
+      } finally {
+        if (isMounted) setIsLoaded(true);
       }
+    };
 
-      // Migration
-      if (loadedChallenges.length === 0) {
-        const defaultChall = createDefaultChallenge();
-        loadedChallenges = [defaultChall];
-      }
+    loadData();
 
-      setChallenges(loadedChallenges);
-
-      if (savedActive && loadedChallenges.find((c: Challenge) => c.id === savedActive)) {
-        setActiveChallengeId(savedActive);
-      } else if (loadedChallenges.length > 0) {
-        setActiveChallengeId(loadedChallenges[0].id);
-      }
-    } catch (e) {
-      console.error("Failed to load challenges from localStorage", e);
-      // Fallback
-      const fallback = createDefaultChallenge();
-      setChallenges([fallback]);
-      setActiveChallengeId(fallback.id);
-    } finally {
-      setIsLoaded(true);
-    }
-  }, []);
-
-  // Save to localStorage whenever state changes
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem("monkMode_challenges", JSON.stringify(challenges));
-      localStorage.setItem("monkMode_activeId", activeChallengeId);
-    }
-  }, [challenges, activeChallengeId, isLoaded]);
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   // Derived active challenge
   const activeChallenge = challenges.find((c) => c.id === activeChallengeId);
 
   // Actions
-  const handleCreateChallenge = (name: string, desc: string, start: string, end: string) => {
+  const handleCreateChallenge = async (name: string, desc: string, start: string, end: string) => {
+    if (!user) return;
+
     const newChallenge: Challenge = {
-      id: Date.now().toString(),
+      id: `chal-${Date.now()}`,
       name,
       description: desc,
       startDate: start,
       endDate: end,
-      habits: JSON.parse(JSON.stringify(INITIAL_HABITS)), // Deep copy 
+      habits: JSON.parse(JSON.stringify(INITIAL_HABITS)),
       trackerState: {},
     };
+
+    // Optimistic UI update
     setChallenges((prev) => [...prev, newChallenge]);
     setActiveChallengeId(newChallenge.id);
     setIsModalOpen(false);
+
+    try {
+      await saveChallenge(user.uid, newChallenge);
+    } catch (error) {
+      console.error("Error creating challenge in DB", error);
+      // Revert UI could happen here
+    }
   };
 
-  const handleChangeHabitName = (habitId: string, newName: string) => {
-    setChallenges((prev) =>
-      prev.map((c) => {
-        if (c.id !== activeChallengeId) return c;
-        return {
-          ...c,
-          habits: c.habits.map((h) => (h.id === habitId ? { ...h, name: newName } : h)),
-        };
-      })
-    );
+  const handleChangeHabitName = async (habitId: string, newName: string) => {
+    if (!user || !activeChallenge) return;
+
+    const updatedChallenge = {
+      ...activeChallenge,
+      habits: activeChallenge.habits.map((h) => (h.id === habitId ? { ...h, name: newName } : h)),
+    };
+
+    // Optimistic UI
+    setChallenges((prev) => prev.map((c) => (c.id === activeChallengeId ? updatedChallenge : c)));
+
+    // Save async
+    try {
+      setIsSaving(true);
+      await saveChallenge(user.uid, updatedChallenge);
+    } catch (error) {
+      console.error("Error updating habit name in DB", error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleToggleState = (habitId: string, dayIndex: number) => {
-    setChallenges((prev) =>
-      prev.map((c) => {
-        if (c.id !== activeChallengeId) return c;
+  const handleToggleState = async (habitId: string, dayIndex: number) => {
+    if (!user || !activeChallenge) return;
 
-        const key = `${habitId}-${dayIndex}`;
-        const currentState = c.trackerState[key] || 0;
-        const nextState = ((currentState + 1) % 4) as HabitState;
+    const key = `${habitId}-${dayIndex}`;
+    const currentState = activeChallenge.trackerState[key] || 0;
+    const nextState = ((currentState + 1) % 4) as HabitState;
 
-        return {
-          ...c,
-          trackerState: {
-            ...c.trackerState,
-            [key]: nextState,
-          },
-        };
-      })
-    );
+    const updatedChallenge = {
+      ...activeChallenge,
+      trackerState: {
+        ...activeChallenge.trackerState,
+        [key]: nextState,
+      },
+    };
+
+    // Optimistic UI Update for zero latency
+    setChallenges((prev) => prev.map((c) => (c.id === activeChallengeId ? updatedChallenge : c)));
+
+    // Save async
+    try {
+      setIsSaving(true);
+      await saveChallenge(user.uid, updatedChallenge);
+    } catch (error) {
+      console.error("Error updating day state in DB", error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!isLoaded) {
     return (
-      <div className="flex h-[80vh] w-full items-center justify-center text-neutral-500">
-        Iniciando Trackers...
+      <div className="flex h-[80vh] w-full flex-col items-center justify-center text-emerald-500 gap-4">
+        <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></div>
+        <p className="text-sm font-medium animate-pulse">Sincronizando Trackers desde la Nube...</p>
       </div>
     );
   }
@@ -134,14 +163,14 @@ export default function TrackersPage() {
   return (
     <div className="p-6 w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Challenge Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-neutral-100">Mis Trackers</h1>
-          <p className="text-neutral-500 text-sm mt-1">Gestiona el progreso diario de tus plantillas activas.</p>
+          <p className="text-neutral-500 text-sm mt-1">Gestiona el progreso sincronizado de tus plantillas activas.</p>
         </div>
         <div className="flex gap-2">
           <select
-            className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2.5"
+            className="bg-neutral-900 border border-neutral-700 text-neutral-200 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2.5 outline-none cursor-pointer"
             value={activeChallengeId}
             onChange={(e) => setActiveChallengeId(e.target.value)}
           >
@@ -153,6 +182,14 @@ export default function TrackersPage() {
           >
             Nuevo Tracker
           </button>
+        </div>
+      </div>
+
+      {/* Network Saving Indicator */}
+      <div className="mb-6 flex justify-end">
+        <div className={`text-xs flex items-center gap-2 transition-opacity duration-300 ${isSaving ? 'opacity-100 text-emerald-500' : 'opacity-0 text-neutral-500'}`}>
+          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+          Guardando en la nube...
         </div>
       </div>
 

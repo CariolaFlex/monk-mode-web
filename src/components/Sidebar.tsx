@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Target, LayoutTemplate, Settings, User } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import Image from "next/image";
 
 export default function Sidebar() {
     const pathname = usePathname();
+    const { user, logout } = useAuth();
 
     const navItems = [
         { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -18,13 +21,16 @@ export default function Sidebar() {
         <aside className="w-64 bg-neutral-950 border-r border-neutral-800 h-screen flex flex-col flex-shrink-0 sticky top-0 hidden md:flex">
             {/* Profile Section */}
             <div className="p-6 border-b border-neutral-800 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 overflow-hidden">
-                    {/* Real Avatar would go here */}
-                    <User size={24} />
+                <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 overflow-hidden shrink-0 border border-neutral-700">
+                    {user?.photoURL ? (
+                        <Image src={user.photoURL} alt="Avatar" width={48} height={48} className="w-full h-full object-cover" />
+                    ) : (
+                        <User size={24} />
+                    )}
                 </div>
-                <div>
-                    <div className="text-sm font-bold text-neutral-100">CariolaFlex</div>
-                    <div className="text-xs font-mono text-emerald-500">PRO PLAN</div>
+                <div className="overflow-hidden">
+                    <div className="text-sm font-bold text-neutral-100 truncate">{user?.displayName || "Monk"}</div>
+                    <div className="text-xs font-mono text-emerald-500 mt-0.5">PRO PLAN</div>
                 </div>
             </div>
 
@@ -43,8 +49,8 @@ export default function Sidebar() {
                             key={item.name}
                             href={item.href}
                             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive
-                                    ? "bg-neutral-800 text-neutral-100 shadow-sm"
-                                    : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
+                                ? "bg-neutral-800 text-neutral-100 shadow-sm"
+                                : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
                                 }`}
                         >
                             <Icon size={18} className={isActive ? "text-emerald-500" : ""} />
@@ -56,8 +62,8 @@ export default function Sidebar() {
 
             {/* Footer Settings/Logout */}
             <div className="p-4 border-t border-neutral-800 space-y-2">
-                <Link
-                    href="/login"
+                <button
+                    onClick={() => logout()}
                     className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-neutral-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]">
@@ -66,7 +72,7 @@ export default function Sidebar() {
                         <line x1="21" y1="12" x2="9" y2="12"></line>
                     </svg>
                     Log Out
-                </Link>
+                </button>
             </div>
         </aside>
     );

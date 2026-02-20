@@ -1,13 +1,34 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { signInWithPopup } from "firebase/auth";
+import { auth, googleProvider } from "@/lib/firebase";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+    const router = useRouter();
+    const [error, setError] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+
     const handleMockLogin = (e: React.FormEvent) => {
         e.preventDefault();
-        // Simulate login redirect
-        window.location.href = "/dashboard";
+        setError("El inicio con email aún no está disponible. Usa Google.");
+    };
+
+    const handleGoogleLogin = async () => {
+        try {
+            setIsLoading(true);
+            setError("");
+            await signInWithPopup(auth, googleProvider);
+            router.push("/dashboard");
+        } catch (err: any) {
+            console.error("Auth error", err);
+            setError("Error al iniciar sesión con Google.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -20,6 +41,12 @@ export default function LoginPage() {
                     Entra a tu Plataforma Pro
                 </p>
             </div>
+
+            {error && (
+                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-500 text-sm px-4 py-3 rounded-xl mb-6">
+                    {error}
+                </div>
+            )}
 
             <form onSubmit={handleMockLogin} className="space-y-4">
                 <div>
@@ -47,7 +74,8 @@ export default function LoginPage() {
 
                 <button
                     type="submit"
-                    className="w-full mt-6 bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2 group"
+                    disabled={isLoading}
+                    className="w-full mt-6 bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-3 rounded-xl transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
                 >
                     <span>Entrar</span>
                     <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
@@ -64,11 +92,9 @@ export default function LoginPage() {
             </div>
 
             <button
-                onClick={() => {
-                    // Simulate simple Google auth redirect 
-                    window.location.href = "/dashboard";
-                }}
-                className="w-full bg-white hover:bg-neutral-200 text-black font-medium py-3 rounded-xl transition-colors flex items-center justify-center gap-3"
+                onClick={handleGoogleLogin}
+                disabled={isLoading}
+                className="w-full bg-white hover:bg-neutral-200 text-black font-medium py-3 rounded-xl transition-colors flex items-center justify-center gap-3 disabled:opacity-50"
             >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path
@@ -89,7 +115,7 @@ export default function LoginPage() {
                     />
                     <path fill="none" d="M1 1h22v22H1z" />
                 </svg>
-                <span>Continuar con Google</span>
+                <span>{isLoading ? "Iniciando..." : "Continuar con Google"}</span>
             </button>
 
             <p className="text-center text-xs text-neutral-600 mt-8">

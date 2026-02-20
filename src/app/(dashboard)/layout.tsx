@@ -1,19 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import { Menu, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, Target, LayoutTemplate, Settings } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 export default function DashboardLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
+    const { user, loading, logout } = useAuth();
+    const router = useRouter();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const pathname = usePathname();
+
+    useEffect(() => {
+        if (!loading && !user) {
+            router.push("/login");
+        }
+    }, [user, loading, router]);
+
+    if (loading || !user) {
+        return (
+            <div className="flex h-screen w-full items-center justify-center bg-black">
+                <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></div>
+            </div>
+        );
+    }
 
     const navItems = [
         { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -59,8 +76,8 @@ export default function DashboardLayout({
                                 href={item.href}
                                 onClick={() => setIsMobileMenuOpen(false)}
                                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${isActive
-                                        ? "bg-neutral-800 text-neutral-100 shadow-sm"
-                                        : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
+                                    ? "bg-neutral-800 text-neutral-100 shadow-sm"
+                                    : "text-neutral-400 hover:bg-neutral-900 hover:text-neutral-200"
                                     }`}
                             >
                                 <Icon size={18} className={isActive ? "text-emerald-500" : ""} />
@@ -70,12 +87,12 @@ export default function DashboardLayout({
                     })}
 
                     <div className="border-t border-neutral-800 mt-4 pt-4">
-                        <Link
-                            href="/login"
+                        <button
+                            onClick={() => logout()}
                             className="w-full flex justify-center items-center gap-2 px-4 py-3 rounded-lg text-sm bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-300 font-bold transition-colors"
                         >
                             Log Out
-                        </Link>
+                        </button>
                     </div>
                 </div>
             )}
